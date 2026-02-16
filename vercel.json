@@ -4,14 +4,14 @@
             "runtime": "vercel-php@0.7.1"
         }
     },
-    "routes": [
+    "rewrites": [
         {
-            "src": "/api/(.*).php",
-            "dest": "/api/$1.php"
+            "source": "/api/(.*)",
+            "destination": "/api/$1"
         },
         {
-            "src": "/(.*)",
-            "dest": "/dist/$1"
+            "source": "/(.*)",
+            "destination": "/dist/$1"
         }
     ]
 }
