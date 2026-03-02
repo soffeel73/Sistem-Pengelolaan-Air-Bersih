@@ -18,6 +18,14 @@ try {
     if (isset($_ENV['VERCEL']) || getenv('VERCEL')) {
         $results['included_file'] = 'util/db_production.php';
         require_once 'util/db_production.php';
+
+        $results['credentials_check'] = [
+            'host' => getenv('DB_HOST') ? substr(getenv('DB_HOST'), 0, 3) . '...' : 'FALLBACK',
+            'user' => getenv('DB_USER') ? substr(getenv('DB_USER'), 0, 5) . '...' : 'FALLBACK',
+            'db_name' => getenv('DB_NAME') ? substr(getenv('DB_NAME'), 0, 5) . '...' : 'FALLBACK',
+            'pass_length' => getenv('DB_PASS') ? strlen(getenv('DB_PASS')) : 'FALLBACK_LEN',
+        ];
+
     }
     else {
         $results['included_file'] = 'util/db.php';
@@ -37,7 +45,12 @@ try {
     }
 }
 catch (Exception $e) {
-    $results['connection_test'] = 'ERROR: ' . $e->getMessage();
+    if (strpos($e->getMessage(), 'Access denied') !== false) {
+        $results['connection_test'] = 'DENIED: Access Refused. Check Remote MySQL & Password.';
+    }
+    else {
+        $results['connection_test'] = 'ERROR: ' . $e->getMessage();
+    }
 }
 
 echo json_encode($results, JSON_PRETTY_PRINT);
