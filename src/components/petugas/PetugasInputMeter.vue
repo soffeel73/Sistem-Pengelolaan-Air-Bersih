@@ -21,6 +21,12 @@ const filterYear = ref('')
 const showModal = ref(false)
 const isEditing = ref(false)
 
+// Pagination
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+const totalItems = ref(0)
+const totalPages = ref(0)
+
 // Wilayah filter
 const selectedWilayah = ref('')
 
@@ -95,48 +101,24 @@ const filteredCustomers = computed(() => {
   return customers.value.filter(c => c.address === selectedWilayah.value)
 })
 
-// Filter riwayat based on search and period
+// Filter riwayat based on period (legacy - now handled by server)
 const filteredRiwayat = computed(() => {
-  let filtered = riwayatData.value
-
-  // Filter by search query
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item => 
-      item.customer_id.toLowerCase().includes(query) ||
-      item.nama.toLowerCase().includes(query)
-    )
-  }
-
-  // Filter by period (month/year)
-  if (filterMonth.value) {
-    filtered = filtered.filter(item => item.period_month == filterMonth.value)
-  }
-  if (filterYear.value) {
-    filtered = filtered.filter(item => item.period_year == filterYear.value)
-  }
-
-  // Sort by period first (newest to oldest), then by customer_id (ascending)
-  return filtered.sort((a, b) => {
-    // First sort by year (descending - newest first)
-    if (a.period_year !== b.period_year) {
-      return b.period_year - a.period_year
-    }
-    
-    // Then sort by month (descending - December before January)
-    if (a.period_month !== b.period_month) {
-      return b.period_month - a.period_month
-    }
-    
-    // Finally sort by customer_id (ascending - 001, 002, 003...)
-    return a.customer_id.localeCompare(b.customer_id)
-  })
+  return riwayatData.value
 })
+
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    fetchRiwayat()
+  }
+}
 
 const resetFilter = () => {
   searchQuery.value = ''
   filterMonth.value = ''
   filterYear.value = ''
+  currentPage.value = 1
+  fetchRiwayat()
 }
 
 // Format period to readable month/year
@@ -149,10 +131,10 @@ const formatPeriod = (month, year) => {
 // ==================== API FUNCTIONS ====================
 const fetchCustomers = async () => {
   try {
-    const response = await fetch('/api/pelanggan.php')
+    const response = await fetch(`${API_BASE}?action=pelanggans`)
     const data = await response.json()
     if (data.success) {
-      customers.value = data.data
+      customers.value = data.data.sort((a, b) => a.customer_id.localeCompare(b.customer_id))
     }
   } catch (error) {
     console.error('Failed to fetch customers:', error)
@@ -167,8 +149,14 @@ const fetchRiwayat = async () => {
     const petugasId = localStorage.getItem('username') || 'petugas'
     
     const params = new URLSearchParams({
-      petugas_id: petugasId  // Filter by current petugas
+      petugas_id: petugasId,  // Filter by current petugas
+      page: currentPage.value,
+      limit: itemsPerPage.value
     })
+
+    if (filterYear.value) params.append('year', filterYear.value)
+    if (filterMonth.value) params.append('month', filterMonth.value)
+    if (searchQuery.value) params.append('search', searchQuery.value)
     
     const response = await fetch(`${API_BASE}?${params.toString()}`)
     const data = await response.json()
@@ -187,6 +175,11 @@ const fetchRiwayat = async () => {
         tanggal: item.created_at || new Date().toISOString(),
         petugas: petugasId
       }))
+
+      if (data.pagination) {
+        totalItems.value = data.pagination.total_items
+        totalPages.value = data.pagination.total_pages
+      }
     }
   } catch (error) {
     console.error('Failed to fetch riwayat:', error)
@@ -222,7 +215,6 @@ const fetchMeterAwal = async () => {
 // ==================== MODAL FUNCTIONS ====================
 const openAddModal = () => {
   isEditing.value = false
-  selectedWilayah.value = '' // Reset wilayah filter
   formData.value = {
     pelanggan_id: '',
     period_year: new Date().getFullYear(),
@@ -274,7 +266,12 @@ const saveMeterReading = async () => {
       await fetchCustomers()
       await fetchRiwayat()
       
-      closeModal()
+      // Keep modal open, retain wilayah, reset customer selection for next input
+      formData.value.pelanggan_id = ''
+      formData.value.meter_awal = 0
+      formData.value.meter_akhir = 0
+      selectedCustomer.value = null
+      formErrors.value = {}
     } else {
       if (window.showToast) {
         window.showToast(data.message || 'Gagal menyimpan data', 'error')
@@ -316,6 +313,22 @@ watch(selectedWilayah, () => {
   formData.value.pelanggan_id = ''
   selectedCustomer.value = null
   formData.value.meter_awal = 0
+})
+
+// Watch for filter change
+watch([filterYear, filterMonth], () => {
+  currentPage.value = 1
+  fetchRiwayat()
+})
+
+// Debounced search
+let searchTimeout
+watch(searchQuery, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    currentPage.value = 1
+    fetchRiwayat()
+  }, 500)
 })
 
 // Initialize
@@ -643,13 +656,45 @@ onMounted(() => {
         <p class="text-gray-400 text-sm mt-1">Data input meteran akan muncul di sini</p>
       </div>
 
-      <!-- Footer Stats -->
-      <div v-if="filteredRiwayat.length > 0" class="bg-frozen px-6 py-4 flex justify-between items-center border-t border-gray-200">
+      <!-- Footer Stats & Pagination -->
+      <div v-if="riwayatData.length > 0" class="bg-frozen px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="text-sm text-gray-600">
-          Total: <span class="font-bold text-gray-900">{{ filteredRiwayat.length }}</span> entri
+          Menampilkan <span class="font-bold text-gray-900">{{ riwayatData.length }}</span> dari <span class="font-bold text-gray-900">{{ totalItems }}</span> entri
         </div>
+        
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1" class="flex items-center gap-2">
+          <button 
+            @click="goToPage(currentPage - 1)" 
+            :disabled="currentPage === 1"
+            class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Sebutuhnya
+          </button>
+          
+          <template v-for="page in totalPages" :key="page">
+            <button 
+              v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
+              @click="goToPage(page)"
+              class="px-3 py-1.5 text-sm rounded-lg border transition-all"
+              :class="page === currentPage ? 'bg-primary text-white border-primary font-bold shadow-md shadow-primary/20' : 'border-gray-200 hover:bg-gray-50 text-gray-600'"
+            >
+              {{ page }}
+            </button>
+            <span v-else-if="page === currentPage - 2 || page === currentPage + 2" class="text-gray-400 px-1">...</span>
+          </template>
+          
+          <button 
+            @click="goToPage(currentPage + 1)" 
+            :disabled="currentPage === totalPages"
+            class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Berikutnya
+          </button>
+        </div>
+
         <div class="text-sm text-gray-600">
-          Total Pemakaian: <span class="font-bold text-primary">{{ filteredRiwayat.reduce((sum, item) => sum + item.pemakaian, 0) }} m³</span>
+          Total Pemakaian: <span class="font-bold text-primary">{{ riwayatData.reduce((sum, item) => sum + item.pemakaian, 0) }} m³</span>
         </div>
       </div>
     </div>

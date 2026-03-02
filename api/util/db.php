@@ -1,10 +1,20 @@
 <?php
 // Smart Air Desa - Database Connection
-// Auto-detect environment: Vercel (production) vs XAMPP (local)
+// Auto-detect environment: Vercel / InfinityFree / XAMPP (local)
 
 $isProduction = isset($_ENV['VERCEL']) || getenv('VERCEL');
+$isInfinityFree = isset($_SERVER['SERVER_NAME']) && strpos($_SERVER['SERVER_NAME'], 'rf.gd') !== false;
 
-if ($isProduction) {
+if ($isInfinityFree) {
+    // InfinityFree Hosting
+    $host = 'sql100.infinityfree.com';
+    $port = '3306';
+    $dbname = 'if0_41064548_hippams';
+    $username = 'if0_41064548';
+    $password = 'Faraway24';
+    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+}
+elseif ($isProduction) {
     // Production: Hostinger Remote MySQL
     $host = '153.92.15.84';
     $port = '3306';

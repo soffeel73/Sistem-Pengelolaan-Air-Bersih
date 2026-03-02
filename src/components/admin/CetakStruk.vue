@@ -162,6 +162,15 @@ watch(searchQuery, (newVal) => {
     }, 300)
   }
 })
+
+// Calculate Total Biaya (Pemakaian + Admin)
+const getTotalBiaya = (struk) => {
+  const p1 = Number(struk.tarif_breakdown?.pemakaian1?.subtotal || 0)
+  const p2 = Number(struk.tarif_breakdown?.pemakaian2?.subtotal || 0)
+  const p3 = Number(struk.tarif_breakdown?.pemakaian3?.subtotal || 0)
+  const admin = Number(struk.biaya_admin || 2000)
+  return p1 + p2 + p3 + admin
+}
 </script>
 
 <template>
@@ -367,7 +376,7 @@ watch(searchQuery, (newVal) => {
           <!-- Header -->
           <div class="struk-header">
             <div class="struk-title">HIPPAMS TIRTO JOYO</div>
-            <div class="struk-subtitle">GEMPOLPAYUNG, GEMPOL TUKLMOKO</div>
+            <div class="struk-subtitle">GEMPOLPAYUNG, GEMPOLTUKLMOKO</div>
             <div class="struk-subtitle">SARIREJO LAMONGAN</div>
             <div class="struk-period-box">STRUK TAGIHAN AIR</div>
             <div class="struk-period">{{ getMonthName(struk.period_month) }} {{ struk.period_year }}</div>
@@ -430,7 +439,11 @@ watch(searchQuery, (newVal) => {
               <span>ADMINISTRASI</span>
               <span>Rp {{ formatRupiah(struk.biaya_admin || 2000) }}</span>
             </div>
-            <div class="struk-row red">
+            <div class="struk-row bold mt-1">
+              <span>TOTAL BIAYA</span>
+              <span>Rp {{ formatRupiah(getTotalBiaya(struk)) }}</span>
+            </div>
+            <div :class="['struk-row', struk.tunggakan > 0 ? 'red bold' : '']">
               <span>TUNGGAKAN</span>
               <span>Rp {{ formatRupiah(struk.tunggakan || 0) }}</span>
             </div>
@@ -452,7 +465,7 @@ watch(searchQuery, (newVal) => {
             <div class="bold">PEMBAYARAN TEPAT WAKTU</div>
             <div class="signatures">
               <div>
-                <div>PELAKSANA KAS</div>
+                <div>BENDAHARA</div>
                 <div class="sign-name">M. ROFI'I</div>
               </div>
               <div>
@@ -550,18 +563,18 @@ watch(searchQuery, (newVal) => {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     grid-template-rows: repeat(3, 1fr) !important;
-    gap: 2mm !important;
+    gap: 1mm !important;
     width: 200mm !important;
-    height: 320mm !important;
+    height: 330mm !important;
     margin: 0 !important;
     padding: 0 !important;
   }
   
   .struk-item {
     border: 1px solid #333 !important;
-    padding: 2mm !important;
-    font-family: 'Courier New', monospace !important;
-    font-size: 7pt !important;
+    padding: 1.5mm !important;
+    font-family: Helvetica, Arial, sans-serif !important;
+    font-size: 8pt !important;
     line-height: 1.2 !important;
     page-break-inside: avoid !important;
     overflow: hidden !important;
@@ -576,17 +589,17 @@ watch(searchQuery, (newVal) => {
   }
   
   .struk-title {
-    font-size: 9pt;
+    font-size: 11pt;
     font-weight: bold;
     color: #7c2d12;
   }
   
   .struk-subtitle {
-    font-size: 6pt;
+    font-size: 8pt;
   }
   
   .struk-period-box {
-    font-size: 8pt;
+    font-size: 10pt;
     font-weight: bold;
     background: #7c2d12 !important;
     color: white !important;
@@ -597,14 +610,14 @@ watch(searchQuery, (newVal) => {
   }
   
   .struk-period {
-    font-size: 7pt;
+    font-size: 9pt;
     font-weight: bold;
   }
   
   .struk-section {
     border-bottom: 1px dashed #333;
-    padding-bottom: 1mm;
-    margin-bottom: 1mm;
+    padding-bottom: 0.5mm;
+    margin-bottom: 0.5mm;
   }
   
   .struk-row {
@@ -629,15 +642,15 @@ watch(searchQuery, (newVal) => {
   
   .struk-total {
     background: #fef3c7 !important;
-    padding: 1mm;
+    padding: 0.5mm 1mm;
     border: 1px solid #f59e0b;
-    margin-bottom: 1mm;
+    margin-bottom: 0.5mm;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   
   .terbilang {
-    font-size: 6pt;
+    font-size: 8pt;
     font-style: italic;
     text-transform: capitalize;
   }
@@ -646,7 +659,7 @@ watch(searchQuery, (newVal) => {
     text-align: center;
     border-top: 1px dashed #333;
     padding-top: 1mm;
-    font-size: 6pt;
+    font-size: 8pt;
   }
   
   .payment-info {
@@ -657,12 +670,12 @@ watch(searchQuery, (newVal) => {
   .signatures {
     display: flex;
     justify-content: space-between;
-    margin-top: 2mm;
+    margin-top: 1mm;
     text-align: left;
   }
   
   .sign-name {
-    margin-top: 8mm;
+    margin-top: 4mm;
     font-weight: bold;
   }
 }

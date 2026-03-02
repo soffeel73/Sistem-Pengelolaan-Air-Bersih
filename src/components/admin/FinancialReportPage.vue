@@ -407,36 +407,150 @@ const exportPDF = async () => {
       formatRupiah(row.saldo_bersih)
     ])
     
+    // Add totals row
+    tableData.push([
+      '', 'TOTAL',
+      formatRupiah(yearlyTotals.value.pendapatan_air),
+      formatRupiah(yearlyTotals.value.pemasukan_lainnya),
+      formatRupiah(yearlyTotals.value.piutang),
+      formatRupiah(yearlyTotals.value.pengeluaran),
+      formatRupiah(yearlyTotals.value.saldo_bersih)
+    ])
+    
     autoTable(doc, {
       startY: 40,
       head: [['No', 'Bulan', 'Pemasukan Air', 'Lainnya', 'Piutang', 'Pengeluaran', 'Saldo Bersih']],
       body: tableData,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [46, 196, 182] }
+      headStyles: { fillColor: [46, 196, 182] },
+      // Bold the last row (totals)
+      didParseCell: (data) => {
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold'
+          data.cell.styles.fillColor = [240, 240, 240]
+        }
+      }
     })
   } else {
     doc.text(`Bulan: ${monthLabels[filterMonth.value]}`, 14, 38)
     
-    const tableData = dailyData.value.map((row, idx) => [
-      idx + 1,
-      formatDate(row.tanggal),
-      row.tipe === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran',
-      row.nama,
-      row.kategori,
-      formatRupiah(row.nominal)
-    ])
-    
-    autoTable(doc, {
-      startY: 48,
-      head: [['No', 'Tanggal', 'Jenis', 'Nama', 'Kategori', 'Nominal']],
-      body: tableData,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [46, 196, 182] }
-    })
+    // Fetch ALL data (no pagination) for PDF export
+    try {
+      const params = new URLSearchParams({
+        action: 'daily',
+        year: filterYear.value,
+        month: filterMonth.value,
+        page: 1,
+        limit: 99999
+      })
+      const response = await fetch(`${API_BASE}?${params.toString()}`)
+      const result = await response.json()
+      
+      if (!result.success) {
+        showToast('Gagal mengambil data untuk PDF', 'error')
+        return
+      }
+      
+      const allData = result.data
+      const summary = result.summary
+      
+      // Separate water payments from other transactions
+      let waterCount = 0
+      let waterTotal = 0
+      const otherTransactions = []
+      
+      allData.forEach(row => {
+        if (row.kategori === 'Tagihan Air Bulanan') {
+          waterCount++
+          waterTotal += parseFloat(row.nominal || 0)
+        } else {
+          otherTransactions.push(row)
+        }
+      })
+      
+      // Build combined rows
+      const combinedRows = []
+      const today = new Date().toISOString().split('T')[0] // tanggal cetak
+      
+      // Add single global water payment rows (Air + Admin) at today's date
+      if (waterCount > 0) {
+        const adminTotal = waterCount * 2000
+        const airTotal = waterTotal - adminTotal
+        
+        combinedRows.push({
+          tanggal: today,
+          tipe: 'pemasukan',
+          nama: `Pembayaran Air Pelanggan ${waterCount} pelanggan`,
+          kategori: 'Tagihan Air',
+          nominal: airTotal
+        })
+        combinedRows.push({
+          tanggal: today,
+          tipe: 'pemasukan',
+          nama: `Pembayaran Admin ${waterCount} pelanggan`,
+          kategori: 'Biaya Admin',
+          nominal: adminTotal
+        })
+      }
+      
+      // Add other transactions
+      otherTransactions.forEach(row => {
+        combinedRows.push({
+          tanggal: row.tanggal,
+          tipe: row.tipe,
+          nama: row.nama,
+          kategori: row.kategori,
+          nominal: parseFloat(row.nominal || 0)
+        })
+      })
+      
+      // Sort by date ascending
+      combinedRows.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal))
+      
+      const tableData = combinedRows.map((row, idx) => [
+        idx + 1,
+        formatDate(row.tanggal),
+        row.tipe === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran',
+        row.nama,
+        row.kategori,
+        formatRupiah(row.nominal)
+      ])
+      
+      // Add summary rows
+      tableData.push(
+        ['', '', '', '', 'Total Pemasukan:', formatRupiah(summary.total_pemasukan)],
+        ['', '', '', '', 'Total Pengeluaran:', formatRupiah(summary.total_pengeluaran)],
+        ['', '', '', '', 'Saldo:', formatRupiah(summary.saldo)]
+      )
+      
+      autoTable(doc, {
+        startY: 48,
+        head: [['No', 'Tanggal', 'Jenis', 'Nama', 'Kategori', 'Nominal']],
+        body: tableData,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [46, 196, 182] },
+        // Style the summary rows
+        didParseCell: (data) => {
+          const totalRows = tableData.length
+          if (data.row.index >= totalRows - 3) {
+            data.cell.styles.fontStyle = 'bold'
+            data.cell.styles.fillColor = [245, 245, 245]
+          }
+        }
+      })
+      
+      showToast(`Berhasil export ${allData.length} data ke PDF`, 'success')
+    } catch (error) {
+      console.error('PDF export error:', error)
+      showToast('Gagal export PDF', 'error')
+      return
+    }
   }
   
   doc.save(`Laporan-Keuangan-${filterYear.value}${activeSubmenu.value === 'bulanan' ? '-' + filterMonth.value : ''}.pdf`)
-  showToast('PDF berhasil diunduh', 'success')
+  if (activeSubmenu.value === 'tahunan') {
+    showToast('PDF berhasil diunduh', 'success')
+  }
 }
 
 const exportExcel = async () => {
@@ -1086,6 +1200,10 @@ onMounted(() => {
                     <div class="flex justify-between">
                       <span class="text-gray-600">Biaya Admin ({{ detailData.breakdown_air.customer_count }} pelanggan)</span>
                       <span class="font-bold text-primary">{{ formatRupiah(detailData.breakdown_air.admin_fee) }}</span>
+                    </div>
+                    <div v-if="detailData.breakdown_air.pembayaran_tunggakan > 0" class="flex justify-between">
+                      <span class="text-gray-600">Pembayaran Tunggakan/Lain</span>
+                      <span class="font-bold text-primary">{{ formatRupiah(detailData.breakdown_air.pembayaran_tunggakan) }}</span>
                     </div>
                     <div class="flex justify-between pt-2 border-t border-primary/20">
                       <span class="font-bold text-gray-900">Subtotal Air</span>

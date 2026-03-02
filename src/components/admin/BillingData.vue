@@ -346,24 +346,50 @@ const sendWhatsAppReminder = (tagihan) => {
 }
 
 // ==================== EXPORT PDF FUNCTIONS ====================
-const exportToPDF = () => {
-  if (filteredTagihans.value.length === 0) {
-    showToast('Tidak ada data untuk diexport', 'error')
+const exportToPDF = async () => {
+  // Fetch ALL data (no pagination) for PDF export
+  isLoading.value = true
+  let allData = []
+  try {
+    const params = new URLSearchParams()
+    if (filterYear.value) params.append('year', filterYear.value)
+    if (filterMonth.value) params.append('month', filterMonth.value)
+    if (filterStatus.value && filterStatus.value !== 'all') params.append('status', filterStatus.value)
+    if (searchQuery.value) params.append('search', searchQuery.value)
+    params.append('export', 'all') // Skip pagination, fetch all data
+    
+    const response = await fetch(`${API_BASE}?${params.toString()}`)
+    const result = await response.json()
+    if (result.success && result.data.length > 0) {
+      allData = result.data
+    } else {
+      showToast('Tidak ada data untuk diexport', 'error')
+      isLoading.value = false
+      return
+    }
+  } catch (error) {
+    console.error('Export fetch error:', error)
+    showToast('Gagal mengambil data untuk export', 'error')
+    isLoading.value = false
     return
   }
+  isLoading.value = false
+  
+  const ADMIN_FEE = 2000
   
   const periodLabel = filterMonth.value 
     ? `${getMonthLabel(filterMonth.value)} ${filterYear.value}` 
     : `Tahun ${filterYear.value}`
   
-  // Calculate totals
-  const totalPemakaian = filteredTagihans.value.reduce((sum, t) => sum + parseFloat(t.jumlah_pakai || 0), 0)
-  const totalBiayaPemakaian = filteredTagihans.value.reduce((sum, t) => sum + parseFloat(t.biaya_pemakaian || 0), 0)
-  const totalTunggakan = filteredTagihans.value.reduce((sum, t) => sum + parseFloat(t.tunggakan || 0), 0)
-  const totalTagihan = filteredTagihans.value.reduce((sum, t) => sum + parseFloat(t.total_tagihan || 0), 0)
+  // Calculate totals — biaya_pemakaian from backend includes admin, so we separate them
+  const totalPemakaian = allData.reduce((sum, t) => sum + parseFloat(t.jumlah_pakai || 0), 0)
+  const totalBiayaPakai = allData.reduce((sum, t) => sum + (parseFloat(t.biaya_pemakaian || 0) - ADMIN_FEE), 0)
+  const totalAdmin = allData.length * ADMIN_FEE
+  const totalTunggakan = allData.reduce((sum, t) => sum + parseFloat(t.tunggakan || 0), 0)
+  const totalTagihan = totalBiayaPakai + totalAdmin + totalTunggakan
   
-  const dataLunas = filteredTagihans.value.filter(t => t.status === 'paid')
-  const dataBelum = filteredTagihans.value.filter(t => t.status !== 'paid')
+  const dataLunas = allData.filter(t => t.status === 'paid')
+  const dataBelum = allData.filter(t => t.status !== 'paid')
   const totalTerbayar = dataLunas.reduce((sum, t) => sum + parseFloat(t.total_tagihan || 0), 0)
   const totalPiutang = dataBelum.reduce((sum, t) => sum + parseFloat(t.total_tagihan || 0), 0)
   
@@ -382,39 +408,41 @@ const exportToPDF = () => {
   const margin = 15
   let yPos = margin
   
-  // ==================== HEADER ====================
-  // Title
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(18)
-  doc.setTextColor(0, 0, 0)
-  doc.text('HIPPAMS TIRTO JOYO', pageWidth / 2, yPos, { align: 'center' })
-  yPos += 7
+  // ==================== HEADER (first page only drawn here) ====================
+  const drawHeader = (d) => {
+    let y = margin
+    d.setFont('helvetica', 'bold')
+    d.setFontSize(18)
+    d.setTextColor(0, 0, 0)
+    d.text('HIPPAMS TIRTO JOYO', pageWidth / 2, y, { align: 'center' })
+    y += 7
+    d.setFont('helvetica', 'normal')
+    d.setFontSize(10)
+    d.text('GEMPOLPAYUNG, GEMPOL TUKMLOKO, SARIREJO LAMONGAN', pageWidth / 2, y, { align: 'center' })
+    y += 10
+    d.setLineWidth(0.8)
+    d.line(margin, y, pageWidth - margin, y)
+    y += 1.5
+    d.setLineWidth(0.3)
+    d.line(margin, y, pageWidth - margin, y)
+    y += 8
+    d.setFont('helvetica', 'bold')
+    d.setFontSize(14)
+    d.text('LAPORAN REKAPITULASI TAGIHAN AIR', pageWidth / 2, y, { align: 'center' })
+    y += 6
+    d.setFont('helvetica', 'normal')
+    d.setFontSize(11)
+    d.text(`Periode: ${periodLabel}`, pageWidth / 2, y, { align: 'center' })
+    y += 4
+    d.setFontSize(9)
+    d.setTextColor(100, 100, 100)
+    d.setTextColor(0, 0, 0)
+    y += 8
+    return y
+  }
   
-  // Address
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.text('GEMPOLPAYUNG, GEMPOL TUKMLOKO, SARIREJO LAMONGAN', pageWidth / 2, yPos, { align: 'center' })
-  yPos += 10
-  
-  // Double line separator
-  doc.setLineWidth(0.8)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 1.5
-  doc.setLineWidth(0.3)
-  doc.line(margin, yPos, pageWidth - margin, yPos)
-  yPos += 8
-  
-  // Report Title
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(14)
-  doc.text('LAPORAN REKAPITULASI TAGIHAN AIR', pageWidth / 2, yPos, { align: 'center' })
-  yPos += 6
-  
-  // Period
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(11)
-  doc.text(`Periode: ${periodLabel}`, pageWidth / 2, yPos, { align: 'center' })
-  yPos += 10
+  // Draw header on first page
+  yPos = drawHeader(doc)
   
   // ==================== TABLE ====================
   const tableColumns = [
@@ -432,83 +460,132 @@ const exportToPDF = () => {
     { header: 'Status', dataKey: 'status' }
   ]
   
-  const tableData = filteredTagihans.value.map((t, index) => ({
-    no: index + 1,
-    customer_id: t.customer_id || '-',
-    nama: t.pelanggan_name || '-',
-    alamat: (t.pelanggan_address || '-').substring(0, 20),
-    meter_awal: t.meter_awal || 0,
-    meter_akhir: t.meter_akhir || 0,
-    pemakaian: t.jumlah_pakai || 0,
-    biaya: formatRp(t.biaya_pemakaian),
-    admin: 'Rp 2.000',
-    tunggakan: formatRp(t.tunggakan),
-    total: formatRp(t.total_tagihan),
-    status: t.status === 'paid' ? 'LUNAS' : 'BELUM'
-  }))
+  const tableData = allData.map((t, index) => {
+    const biayaPakai = parseFloat(t.biaya_pemakaian || 0) - ADMIN_FEE
+    const tunggakan = parseFloat(t.tunggakan || 0)
+    const totalPerRow = biayaPakai + ADMIN_FEE + tunggakan
+    return {
+      no: index + 1,
+      customer_id: t.customer_id || '-',
+      nama: t.pelanggan_name || '-',
+      alamat: (t.pelanggan_address || '-').substring(0, 20),
+      meter_awal: t.meter_awal || 0,
+      meter_akhir: t.meter_akhir || 0,
+      pemakaian: t.jumlah_pakai || 0,
+      biaya: formatRp(biayaPakai),
+      admin: formatRp(ADMIN_FEE),
+      tunggakan: formatRp(tunggakan),
+      total: formatRp(totalPerRow),
+      status: t.status === 'paid' ? 'LUNAS' : 'BELUM'
+    }
+  })
+  
+  // Add totals footer row
+  tableData.push({
+    no: '',
+    customer_id: '',
+    nama: 'TOTAL',
+    alamat: '',
+    meter_awal: '',
+    meter_akhir: '',
+    pemakaian: totalPemakaian,
+    biaya: formatRp(totalBiayaPakai),
+    admin: formatRp(totalAdmin),
+    tunggakan: formatRp(totalTunggakan),
+    total: formatRp(totalTagihan),
+    status: ''
+  })
   
   let tableEndY = yPos
+  let totalPagesCount = 0
   
   autoTable(doc, {
     startY: yPos,
     columns: tableColumns,
     body: tableData,
     theme: 'grid',
+    showHead: 'everyPage', // Repeat table header on every page
     headStyles: {
-      fillColor: [243, 244, 246], // #F3F4F6
+      fillColor: [243, 244, 246],
       textColor: [0, 0, 0],
       fontStyle: 'bold',
-      fontSize: 7,
+      fontSize: 9,
       halign: 'center'
     },
     bodyStyles: {
-      fontSize: 7,
-      cellPadding: 1.5
+      fontSize: 9,
+      cellPadding: 2.5
     },
     alternateRowStyles: {
-      fillColor: [249, 250, 251] // Zebra striping
+      fillColor: [249, 250, 251]
     },
     columnStyles: {
-      no: { halign: 'center', cellWidth: 7 },
-      customer_id: { halign: 'center', cellWidth: 18 },
-      nama: { cellWidth: 28 },
-      alamat: { cellWidth: 28 },
-      meter_awal: { halign: 'center', cellWidth: 13 },
-      meter_akhir: { halign: 'center', cellWidth: 13 },
-      pemakaian: { halign: 'center', cellWidth: 14 },
-      biaya: { halign: 'right', cellWidth: 22 },
-      admin: { halign: 'right', cellWidth: 14 },
-      tunggakan: { halign: 'right', cellWidth: 22 },
-      total: { halign: 'right', cellWidth: 24 },
-      status: { halign: 'center', cellWidth: 14 }
+      no: { halign: 'center', cellWidth: 10 },
+      customer_id: { halign: 'center', cellWidth: 22 },
+      nama: { cellWidth: 'auto' },
+      alamat: { cellWidth: 'auto' },
+      meter_awal: { halign: 'center', cellWidth: 18 },
+      meter_akhir: { halign: 'center', cellWidth: 18 },
+      pemakaian: { halign: 'center', cellWidth: 18 },
+      biaya: { halign: 'right', cellWidth: 30 },
+      admin: { halign: 'right', cellWidth: 20 },
+      tunggakan: { halign: 'right', cellWidth: 30 },
+      total: { halign: 'right', cellWidth: 32 },
+      status: { halign: 'center', cellWidth: 18 }
     },
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, top: margin + 5, bottom: margin + 10 },
     didParseCell: function(data) {
-      // Color LUNAS green, BELUM red
       if (data.column.dataKey === 'status' && data.section === 'body') {
         if (data.cell.raw === 'LUNAS') {
           data.cell.styles.textColor = [34, 197, 94]
           data.cell.styles.fontStyle = 'bold'
-        } else {
+        } else if (data.cell.raw === 'BELUM') {
           data.cell.styles.textColor = [239, 68, 68]
           data.cell.styles.fontStyle = 'bold'
         }
       }
+      // Style the totals footer row (last row)
+      if (data.section === 'body' && data.row.index === tableData.length - 1) {
+        data.cell.styles.fillColor = [229, 231, 235]
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.textColor = [0, 0, 0]
+      }
     },
     didDrawPage: function(data) {
       tableEndY = data.cursor.y
+      totalPagesCount = doc.internal.getNumberOfPages()
+      
+      // Draw page number footer on every page
+      const pageNum = doc.internal.getCurrentPageInfo().pageNumber
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(
+        `Halaman ${pageNum}`,
+        pageWidth / 2,
+        pageHeight - 8,
+        { align: 'center' }
+      )
+      doc.setTextColor(0, 0, 0)
     }
   })
   
-  // Get final Y position after table
+  // ==================== SUMMARY & SIGNATURES (after table) ====================
+  // Check if enough space on current page, else add new page
   yPos = tableEndY + 10
+  const neededSpace = 70 // space needed for summary + signatures
+  
+  if (yPos + neededSpace > pageHeight - margin) {
+    doc.addPage()
+    yPos = margin + 10
+  }
   
   // ==================== SUMMARY BLOCK ====================
   const summaryX = margin
-  const summaryWidth = 120
+  const summaryWidth = 130
   
   doc.setFillColor(243, 244, 246)
-  doc.roundedRect(summaryX, yPos, summaryWidth, 45, 3, 3, 'F')
+  doc.roundedRect(summaryX, yPos, summaryWidth, 58, 3, 3, 'F')
   
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
@@ -520,21 +597,29 @@ const exportToPDF = () => {
   
   const summaryData = [
     ['Total Pemakaian Air:', `${totalPemakaian.toLocaleString('id-ID')} M³`],
+    ['Total Biaya Pakai:', formatRp(totalBiayaPakai)],
+    ['Total Admin:', formatRp(totalAdmin)],
+    ['Total Tunggakan:', formatRp(totalTunggakan)],
+    ['Total Tagihan Keseluruhan:', formatRp(totalTagihan)],
     ['Total Pendapatan (Lunas):', formatRp(totalTerbayar)],
-    ['Total Piutang (Belum Bayar):', formatRp(totalPiutang)],
-    ['Total Kas Masuk:', formatRp(totalTerbayar)]
+    ['Total Piutang (Belum Bayar):', formatRp(totalPiutang)]
   ]
   
   let summaryY = yPos + 15
-  summaryData.forEach(([label, value]) => {
-    doc.text(label, summaryX + 5, summaryY)
-    doc.setFont('helvetica', 'bold')
-    doc.text(value, summaryX + 55, summaryY)
+  summaryData.forEach(([label, value], idx) => {
+    if (idx === 4) {
+      doc.setDrawColor(150, 150, 150)
+      doc.setLineWidth(0.3)
+      doc.line(summaryX + 5, summaryY - 2, summaryX + summaryWidth - 5, summaryY - 2)
+    }
     doc.setFont('helvetica', 'normal')
+    doc.text(label, summaryX + 5, summaryY)
+    doc.setFont('helvetica', idx === 4 ? 'bold' : 'normal')
+    doc.text(value, summaryX + 65, summaryY)
     summaryY += 7
   })
   
-  // ==================== FOOTER & SIGNATURES ====================
+  // ==================== SIGNATURES ====================
   const signY = yPos + 5
   const signWidth = 60
   const sign1X = pageWidth - margin - signWidth * 2 - 20
@@ -543,30 +628,25 @@ const exportToPDF = () => {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   
-  // Print date
   const now = new Date()
   const printDate = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) + 
                     ' ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   doc.text(`Dicetak: ${printDate}`, sign1X, signY)
   
-  // Signature 1 - Pelaksana Kas
   doc.text('Pelaksana Kas,', sign1X + 10, signY + 12)
-  doc.text('', sign1X + 10, signY + 30) // space for signature
   doc.setFont('helvetica', 'bold')
   doc.text('M. ROFI\'I', sign1X + 10, signY + 38)
   
-  // Signature 2 - Ketua
   doc.setFont('helvetica', 'normal')
   doc.text('Ketua,', sign2X + 10, signY + 12)
-  doc.text('', sign2X + 10, signY + 30) // space for signature
   doc.setFont('helvetica', 'bold')
-  doc.text('ACH. BUR ROHMAN, S.E.', sign2X + 10, signY + 38)
+  doc.text('ACH. HABIBUR ROHMAN, S.E.', sign2X + 10, signY + 38)
   
   // ==================== SAVE PDF ====================
   const filename = `Laporan_Tagihan_${periodLabel.replace(/\s/g, '_')}.pdf`
   doc.save(filename)
   
-  showToast(`Berhasil export ${filteredTagihans.value.length} data ke PDF`, 'success')
+  showToast(`Berhasil export ${allData.length} data ke PDF`, 'success')
 }
 
 // Watch for filter changes

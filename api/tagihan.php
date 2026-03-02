@@ -71,6 +71,7 @@ function getTagihanList($pdo)
         $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
         $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
         $offset = ($page - 1) * $limit;
+        $exportAll = isset($_GET['export']) && $_GET['export'] === 'all';
 
         // Base filter clauses
         $whereSql = " WHERE 1=1";
@@ -101,7 +102,7 @@ function getTagihanList($pdo)
         $countStmt = $pdo->prepare($countSql);
         $countStmt->execute($params);
         $totalItems = intval($countStmt->fetchColumn());
-        $totalPages = ceil($totalItems / $limit);
+        $totalPages = $exportAll ? 1 : ceil($totalItems / $limit);
 
         // ========================================
         // 2. GET AGGREGATE STATS (For filtered set)
@@ -125,7 +126,7 @@ function getTagihanList($pdo)
         $totalTunggakan = floatval($statsData['total_tunggakan']);
 
         // ========================================
-        // 3. GET PAGINATED DATA
+        // 3. GET DATA (paginated or all)
         // ========================================
         $sql = "SELECT 
                     m.id as input_meter_id,
@@ -148,15 +149,20 @@ function getTagihanList($pdo)
                 JOIN pelanggans p ON m.pelanggan_id = p.id
                 LEFT JOIN tagihans t ON t.input_meter_id = m.id" .
             $whereSql .
-            " ORDER BY m.period_year DESC, m.period_month DESC, p.address ASC" .
-            " LIMIT :limit OFFSET :offset";
+            " ORDER BY m.period_year DESC, m.period_month DESC, p.address ASC";
+
+        if (!$exportAll) {
+            $sql .= " LIMIT :limit OFFSET :offset";
+        }
 
         $stmt = $pdo->prepare($sql);
         foreach ($params as $key => $val) {
             $stmt->bindValue($key, $val);
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        if (!$exportAll) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -733,46 +739,29 @@ function updateCicilan($pdo, $inputMeterId)
             'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
         $periode = $MONTH_NAMES[intval($tagihan['period_month'])] . ' ' . $tagihan['period_year'];
-        $nama = "Cicilan Tunggakan - " . $tagihan['pelanggan_name'];
-        $keterangan = "ID: " . $tagihan['customer_id'] . " | Periode: " . $periode . " | Sisa: Rp " . number_format($newTunggakan, 0, ',', '.');
+        $nama = "Cicilan Tagihan Air - " . $tagihan['pelanggan_name'];
+        $keterangan = "ID: " . $tagihan['customer_id'] . " | Cicilan untuk Periode: " . $periode . " | Dibayar tgl: " . date('d/m/Y');
+
+        // Determine category based on whether it's now fully paid
+        $kategori = ($newTunggakan == 0) ? 'Tagihan Air Bulanan' : 'Cicilan Tunggakan';
 
         $stmt = $pdo->prepare("
-            INSERT INTO transaksis (tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
-            VALUES ('pemasukan', :nama, 'Cicilan Tunggakan', :nominal, :tanggal, :keterangan, :period_year, :period_month)
+            INSERT INTO transaksis (tagihan_id, tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
+            VALUES (:tagihan_id, 'pemasukan', :nama, :kategori, :nominal, :tanggal, :keterangan, :period_year, :period_month)
         ");
         $stmt->execute([
+            ':tagihan_id' => $tagihan['id'],
             ':nama' => $nama,
+            ':kategori' => $kategori,
             ':nominal' => $cicilanAmount,
             ':tanggal' => date('Y-m-d'),
             ':keterangan' => $keterangan,
-            ':period_year' => intval(date('Y')),
-            ':period_month' => intval(date('n'))
+            ':period_year' => intval($tagihan['period_year']),
+            ':period_month' => intval($tagihan['period_month'])
         ]);
 
-        // If fully paid, record main payment if not exists
-        if ($newTunggakan == 0) {
-            $stmt = $pdo->prepare("SELECT id FROM transaksis WHERE tagihan_id = :tagihan_id");
-            $stmt->execute([':tagihan_id' => $tagihan['id']]);
-
-            if (!$stmt->fetch()) {
-                $nama = "Pembayaran Air - " . $tagihan['pelanggan_name'];
-                $keterangan = "ID: " . $tagihan['customer_id'] . " | Periode: " . $periode . " | Lunas via Cicilan";
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO transaksis (tagihan_id, tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
-                    VALUES (:tagihan_id, 'pemasukan', :nama, 'Tagihan Air Bulanan', :nominal, :tanggal, :keterangan, :period_year, :period_month)
-                ");
-                $stmt->execute([
-                    ':tagihan_id' => $tagihan['id'],
-                    ':nama' => $nama,
-                    ':nominal' => floatval($tagihan['total_biaya']),
-                    ':tanggal' => date('Y-m-d'),
-                    ':keterangan' => $keterangan,
-                    ':period_year' => intval($tagihan['period_year']),
-                    ':period_month' => intval($tagihan['period_month'])
-                ]);
-            }
-        }
+        // The payment has already been recorded above with the correct amount and category.
+        // No need for a second insert here, as it would cause double-counting of cash.
 
         // RECALCULATE FUTURE MONTHS - Important for auto-accumulation
         $stmt = $pdo->prepare("
@@ -782,13 +771,14 @@ function updateCicilan($pdo, $inputMeterId)
             WHERE m.pelanggan_id = :pelanggan_id
               AND (
                   (m.period_year > :year) OR
-                  (m.period_year = :year AND m.period_month > :month)
+                  (m.period_year = :year2 AND m.period_month > :month)
               )
             ORDER BY m.period_year ASC, m.period_month ASC
         ");
         $stmt->execute([
             ':pelanggan_id' => $tagihan['pelanggan_id'],
             ':year' => $tagihan['period_year'],
+            ':year2' => $tagihan['period_year'],
             ':month' => $tagihan['period_month']
         ]);
         $futureMonths = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -850,12 +840,13 @@ function calculateAccumulatedArrears($pdo, $pelangganId, $periodYear, $periodMon
           AND t.status = 'unpaid'
           AND (
               (m.period_year < :year) OR
-              (m.period_year = :year AND m.period_month < :month)
+              (m.period_year = :year2 AND m.period_month < :month)
           )
     ");
     $stmt->execute([
         ':pelanggan_id' => $pelangganId,
         ':year' => $periodYear,
+        ':year2' => $periodYear,
         ':month' => $periodMonth
     ]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);

@@ -126,7 +126,7 @@ const handleDownloadBill = () => {
   // Subtitle
   doc.setFontSize(12)
   doc.setFont('helvetica', 'normal')
-  doc.text('Pengelolaan Air Bersih Desa', pageWidth / 2, 35, { align: 'center' })
+  doc.text('HIPPAMS Tirto Joyo Gempolpayung', pageWidth / 2, 35, { align: 'center' })
   
   // Period badge
   doc.setFontSize(10)
@@ -269,8 +269,8 @@ const handleDownloadBill = () => {
   doc.setFont('helvetica', 'bold')
   doc.text('INFORMASI PEMBAYARAN:', margin + 5, yPos + 8)
   doc.setFont('helvetica', 'normal')
-  doc.text('• Pembayaran dapat dilakukan di Kantor Desa atau melalui Transfer Bank', margin + 5, yPos + 16)
-  doc.text('• Pembayaran di atas tanggal 20 akan dikenakan denda keterlambatan', margin + 5, yPos + 23)
+  doc.text('• Pembayaran dapat dilakukan di Bendahara atau melalui Transfer Bank', margin + 5, yPos + 16)
+  doc.text('• Tidak melakukan pembayaran 3 bulan berturut-turut akan dilakukan pemutusan saluran air', margin + 5, yPos + 23)
   
   yPos += 40
   
@@ -290,7 +290,7 @@ const handleDownloadBill = () => {
     year: 'numeric' 
   })
   doc.text(`Dicetak pada: ${today}`, margin, footerY - 3)
-  doc.text('Dokumen ini digenerate secara otomatis', pageWidth - margin, footerY - 3, { align: 'right' })
+  doc.text('HIPPAMS Tirto Joyo Gempolpayung', pageWidth - margin, footerY - 3, { align: 'right' })
   
   doc.setTextColor(46, 196, 182)
   doc.setFontSize(9)
@@ -507,7 +507,13 @@ const handleShowPaymentMethods = () => {
                  <li class="flex gap-3 items-start">
                     <div class="w-6 h-6 rounded-full bg-[#FF9F1C] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold font-serif italic">i</div>
                     <p class="text-xs text-gray-500 leading-relaxed">
-                        Pembayaran di atas tanggal 20 akan dikenakan denda keterlambatan.
+                        Tidak melakukan pembayaran 3 bulan berturut-turut akan dilakukan pemutusan saluran air.
+                    </p>
+                 </li>
+                 <li class="flex gap-3 items-start">
+                    <div class="w-6 h-6 rounded-full bg-[#FF9F1C] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold font-serif italic">i</div>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        Pembayaran terakhir tanggal 30 setiap bulan.
                     </p>
                  </li>
                  <li class="flex gap-3 items-start">
@@ -684,7 +690,7 @@ const handleShowPaymentMethods = () => {
                 <div class="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-sm">BCA</div>
                 <div>
                   <div class="font-bold text-gray-900">Bank BCA</div>
-                  <div class="text-xs text-gray-500">a.n. Bendahara Desa</div>
+                  <div class="text-xs text-gray-500">a.n. HIPPAMS Tirto Joyo</div>
                 </div>
               </div>
               <div class="bg-white rounded-lg p-3 border border-blue-200">
@@ -699,7 +705,7 @@ const handleShowPaymentMethods = () => {
                 <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">BNI</div>
                 <div>
                   <div class="font-bold text-gray-900">Bank BNI</div>
-                  <div class="text-xs text-gray-500">a.n. Bendahara Desa</div>
+                  <div class="text-xs text-gray-500">a.n. HIPPAMS Tirto Joyo</div>
                 </div>
               </div>
               <div class="bg-white rounded-lg p-3 border border-red-200">
@@ -714,7 +720,7 @@ const handleShowPaymentMethods = () => {
               <svg class="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
               <div class="text-sm text-amber-800">
                 <p class="font-bold mb-1">Penting!</p>
-                <p>Setelah transfer, mohon konfirmasi dengan mengirim bukti transfer ke WhatsApp: <span class="font-bold">0812-3456-7890</span></p>
+                <p>Setelah transfer, mohon konfirmasi dengan mengirim bukti transfer ke WhatsApp: <span class="font-bold">0857-8446-6697</span></p>
               </div>
             </div>
           </div>

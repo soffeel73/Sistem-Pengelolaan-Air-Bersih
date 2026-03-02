@@ -8,8 +8,11 @@ const API_BASE = '/api/input_meter.php'
 // State
 const riwayatData = ref([])
 const isLoading = ref(false)
-const searchQuery = ref('')
-const selectedDate = ref('')
+// Pagination
+const currentPage = ref(1)
+const itemsPerPage = ref(10)
+const totalItems = ref(0)
+const totalPages = ref(0)
 
 // Fetch riwayat from API
 const fetchRiwayat = async () => {
@@ -19,8 +22,15 @@ const fetchRiwayat = async () => {
     const petugasId = localStorage.getItem('username') || 'petugas'
     
     const params = new URLSearchParams({
-      petugas_id: petugasId  // Filter by current petugas
+      petugas_id: petugasId,  // Filter by current petugas
+      page: currentPage.value,
+      limit: itemsPerPage.value
     })
+
+    if (searchQuery.value) params.append('search', searchQuery.value)
+    // Note: API doesn't seem to support 'date' filter directly in getMeterReadings, 
+    // but it supports search. We'll use legacy filtering for date if needed, 
+    // or just let it be for now since searching is more common.
     
     const response = await fetch(`${API_BASE}?${params.toString()}`)
     const data = await response.json()
@@ -37,6 +47,11 @@ const fetchRiwayat = async () => {
         tanggal: item.created_at || new Date().toISOString(),
         petugas: petugasId
       }))
+
+      if (data.pagination) {
+        totalItems.value = data.pagination.total_items
+        totalPages.value = data.pagination.total_pages
+      }
     }
   } catch (error) {
     console.error('Failed to fetch riwayat:', error)
@@ -45,17 +60,16 @@ const fetchRiwayat = async () => {
   }
 }
 
-// Filter riwayat based on search and date
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    fetchRiwayat()
+  }
+}
+
+// Filter riwayat (Legacy date filter + server side results)
 const filteredRiwayat = computed(() => {
   let filtered = riwayatData.value
-
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item => 
-      item.customer_id.toLowerCase().includes(query) ||
-      item.nama.toLowerCase().includes(query)
-    )
-  }
 
   if (selectedDate.value) {
     filtered = filtered.filter(item => item.tanggal.startsWith(selectedDate.value))
@@ -67,7 +81,20 @@ const filteredRiwayat = computed(() => {
 const resetFilter = () => {
   searchQuery.value = ''
   selectedDate.value = ''
+  currentPage.value = 1
+  fetchRiwayat()
 }
+
+// Watchers for server-side filter
+import { watch } from 'vue'
+let searchTimeout
+watch(searchQuery, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    currentPage.value = 1
+    fetchRiwayat()
+  }, 500)
+})
 
 // Fetch on mount and refresh every 30 seconds
 onMounted(() => {
@@ -188,13 +215,45 @@ onMounted(() => {
         <p class="text-gray-400 text-sm mt-1">Data input meteran akan muncul di sini</p>
       </div>
 
-      <!-- Footer Stats -->
-      <div v-else class="bg-frozen px-6 py-4 flex justify-between items-center border-t border-gray-200">
+      <!-- Footer Stats & Pagination -->
+      <div v-if="riwayatData.length > 0" class="bg-frozen px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="text-sm text-gray-600">
-          Total: <span class="font-bold text-gray-900">{{ filteredRiwayat.length }}</span> entri
+          Menampilkan <span class="font-bold text-gray-900">{{ riwayatData.length }}</span> dari <span class="font-bold text-gray-900">{{ totalItems }}</span> entri
         </div>
+
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1" class="flex items-center gap-2">
+          <button 
+            @click="goToPage(currentPage - 1)" 
+            :disabled="currentPage === 1"
+            class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Sebutuhnya
+          </button>
+          
+          <template v-for="page in totalPages" :key="page">
+            <button 
+              v-if="page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)"
+              @click="goToPage(page)"
+              class="px-3 py-1.5 text-sm rounded-lg border transition-all"
+              :class="page === currentPage ? 'bg-accent text-white border-accent font-bold shadow-md shadow-accent/20' : 'border-gray-200 hover:bg-gray-50 text-gray-600'"
+            >
+              {{ page }}
+            </button>
+            <span v-else-if="page === currentPage - 2 || page === currentPage + 2" class="text-gray-400 px-1">...</span>
+          </template>
+          
+          <button 
+            @click="goToPage(currentPage + 1)" 
+            :disabled="currentPage === totalPages"
+            class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Berikutnya
+          </button>
+        </div>
+
         <div class="text-sm text-gray-600">
-          Total Pemakaian: <span class="font-bold text-accent">{{ filteredRiwayat.reduce((sum, item) => sum + item.pemakaian, 0) }} m³</span>
+          Total Pemakaian: <span class="font-bold text-accent">{{ riwayatData.reduce((sum, item) => sum + item.pemakaian, 0) }} m³</span>
         </div>
       </div>
     </div>

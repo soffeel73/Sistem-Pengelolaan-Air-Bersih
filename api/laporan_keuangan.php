@@ -395,11 +395,22 @@ function getDetailBreakdown($pdo, $year, $month)
             }
         }
 
-        // Get pemasukan lainnya
+        // Get actual cash received for water (Tagihan Air Bulanan)
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(nominal), 0)
+            FROM transaksis
+            WHERE period_year = :year AND period_month = :month 
+              AND tipe = 'pemasukan' AND kategori = 'Tagihan Air Bulanan'
+        ");
+        $stmt->execute([':year' => $year, ':month' => $month]);
+        $totalPemasukanAirCash = floatval($stmt->fetchColumn());
+
+        // Get other income (EXCLUDING Tagihan Air Bulanan)
         $stmt = $pdo->prepare("
             SELECT id, nama, kategori, nominal, tanggal
             FROM transaksis
-            WHERE period_year = :year AND period_month = :month AND tipe = 'pemasukan'
+            WHERE period_year = :year AND period_month = :month 
+              AND tipe = 'pemasukan' AND kategori != 'Tagihan Air Bulanan'
             ORDER BY tanggal ASC
         ");
         $stmt->execute([':year' => $year, ':month' => $month]);
@@ -417,8 +428,11 @@ function getDetailBreakdown($pdo, $year, $month)
         $pengeluaran = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $totalPengeluaran = array_sum(array_column($pengeluaran, 'nominal'));
 
-        $totalPendapatanAir = $blok1 + $blok2 + $blok3 + $adminFee;
-        $totalPemasukan = $totalPendapatanAir + $totalPemasukanLainnya;
+        $totalPendapatanAirBreakdown = $blok1 + $blok2 + $blok3 + $adminFee;
+        // Pembayaran Tunggakan/Lain-lain is the difference between total cash and current month breakdown
+        $pembayaranTunggakan = $totalPemasukanAirCash - $totalPendapatanAirBreakdown;
+
+        $totalPemasukan = $totalPemasukanAirCash + $totalPemasukanLainnya;
 
         echo json_encode([
             'success' => true,
@@ -431,7 +445,8 @@ function getDetailBreakdown($pdo, $year, $month)
                 'blok_3' => $blok3,
                 'admin_fee' => $adminFee,
                 'customer_count' => $customerCount,
-                'total' => $totalPendapatanAir
+                'pembayaran_tunggakan' => $pembayaranTunggakan,
+                'total' => $totalPemasukanAirCash
             ],
             'pemasukan_lainnya' => $pemasukanLainnya,
             'total_pemasukan_lainnya' => $totalPemasukanLainnya,

@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+dist
 dist-ssr
 *.local
 
@@ -27,3 +28,10 @@ uploads/
 
 # PHP Dependencies (installed by Vercel PHP runtime)
 vendor/
+
+# Environment Variables
+api/.env
+api/.env.local
+api/.env.*.local
+.env
+.env.local

@@ -74,10 +74,10 @@ function getPublicStats($pdo)
         $month = date('n');
 
         // 1. Summary Cards
-        // Total usage this month
-        $stmt = $pdo->prepare("SELECT COALESCE(SUM(jumlah_pakai), 0) FROM input_meters WHERE period_year = :year AND period_month = :month");
-        $stmt->execute([':year' => $year, ':month' => $month]);
-        $usageThisMonth = intval($stmt->fetchColumn());
+        // Total usage this year (Synchronized with landing page card)
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(jumlah_pakai), 0) FROM input_meters WHERE period_year = :year");
+        $stmt->execute([':year' => $year]);
+        $usageCurrentYear = intval($stmt->fetchColumn());
 
         // Total active customers
         $stmt = $pdo->query("SELECT COUNT(*) FROM pelanggans");
@@ -136,7 +136,7 @@ function getPublicStats($pdo)
             'success' => true,
             'data' => [
                 'summary' => [
-                    'usage_this_month' => $usageThisMonth,
+                    'usage_current_year' => $usageCurrentYear,
                     'total_customers' => $totalCustomers,
                     'payment_compliance' => $compliance
                 ],

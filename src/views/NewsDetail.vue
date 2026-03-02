@@ -121,9 +121,10 @@ watch(() => route.params.id, () => {
           <!-- Article Body -->
           <div class="prose prose-lg max-w-none mb-12">
             <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-              <div class="text-gray-700 leading-relaxed whitespace-pre-line text-lg">
-                {{ berita.isi_berita }}
-              </div>
+              <div 
+                class="text-gray-700 leading-relaxed text-lg content-rich"
+                v-html="berita.isi_berita"
+              ></div>
             </div>
           </div>
 
@@ -190,6 +191,21 @@ watch(() => route.params.id, () => {
 </template>
 
 <style scoped>
+/* CSS agar tag blockquote dan strong muncul dengan gaya */
+.content-rich :deep(blockquote) {
+  border-left: 5px solid #14b8a6; /* warna primary teal */
+  margin: 1.5em 10px;
+  padding: 0.5em 15px;
+  font-style: italic;
+  background-color: #f0fdfa;
+  color: #374151;
+}
+
+.content-rich :deep(strong) {
+  font-weight: 800;
+  color: #111827;
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;

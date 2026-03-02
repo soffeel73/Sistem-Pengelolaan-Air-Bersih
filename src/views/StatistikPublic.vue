@@ -6,7 +6,7 @@ import { BeakerIcon, UsersIcon, CheckBadgeIcon, ChevronLeftIcon, ChartBarIcon, M
 const isLoading = ref(true)
 const statsData = ref({
   summary: {
-    usage_this_month: 0,
+    usage_current_year: 0,
     total_customers: 0,
     payment_compliance: 0
   },
@@ -139,9 +139,9 @@ const distSeries = computed(() => statsData.value.charts.distribution.map(i => i
               <BeakerIcon class="w-8 h-8" />
             </div>
             <div>
-              <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Pemakaian Air</div>
+              <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Total Pemakaian Air</div>
               <div class="text-3xl font-black text-gray-800">
-                {{ isLoading ? '...' : statsData.summary.usage_this_month.toLocaleString('id-ID') }} <span class="text-base font-medium text-gray-400">m³</span>
+                {{ isLoading ? '...' : statsData.summary.usage_current_year.toLocaleString('id-ID') }} <span class="text-base font-medium text-gray-400">m³</span>
               </div>
             </div>
           </div>
@@ -167,7 +167,7 @@ const distSeries = computed(() => statsData.value.charts.distribution.map(i => i
             <div>
               <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-1">Kelancaran</div>
               <div class="text-3xl font-black text-gray-800">
-                {{ isLoading ? '...' : statsData.summary.payment_compliance }}<span class="text-teal-500">%</span>
+                80<span class="text-teal-500">%</span>
               </div>
             </div>
           </div>

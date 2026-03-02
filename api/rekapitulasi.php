@@ -522,12 +522,17 @@ function updateTunggakanCicilan($pdo, $inputMeterId)
             $nama = "Cicilan Tunggakan - " . $existing['pelanggan_name'];
             $keterangan = "ID: " . $existing['customer_id'] . " | Periode: " . $periode . " | Sisa: Rp " . number_format($newTunggakan, 0, ',', '.');
 
+            // Determine category based on whether it's now fully paid
+            $kategori = ($newTunggakan == 0) ? 'Tagihan Air Bulanan' : 'Cicilan Tunggakan';
+
             $stmt = $pdo->prepare("
-                INSERT INTO transaksis (tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
-                VALUES ('pemasukan', :nama, 'Cicilan Tunggakan', :nominal, :tanggal, :keterangan, :period_year, :period_month)
+                INSERT INTO transaksis (tagihan_id, tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
+                VALUES (:tagihan_id, 'pemasukan', :nama, :kategori, :nominal, :tanggal, :keterangan, :period_year, :period_month)
             ");
             $stmt->execute([
+                ':tagihan_id' => $tagihanId,
                 ':nama' => $nama,
+                ':kategori' => $kategori,
                 ':nominal' => $cicilanAmount,
                 ':tanggal' => date('Y-m-d'),
                 ':keterangan' => $keterangan,
@@ -536,30 +541,8 @@ function updateTunggakanCicilan($pdo, $inputMeterId)
             ]);
         }
 
-        // If fully paid, also create the main payment entry if not exists
-        if ($newTunggakan == 0) {
-            $stmt = $pdo->prepare("SELECT id FROM transaksis WHERE tagihan_id = :tagihan_id");
-            $stmt->execute([':tagihan_id' => $tagihanId]);
-            if (!$stmt->fetch()) {
-                $periode = $MONTH_NAMES[intval($existing['period_month'])] . ' ' . $existing['period_year'];
-                $nama = "Pembayaran Air - " . $existing['pelanggan_name'];
-                $keterangan = "ID: " . $existing['customer_id'] . " | Periode: " . $periode . " | Lunas via Cicilan";
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO transaksis (tagihan_id, tipe, nama, kategori, nominal, tanggal, keterangan, period_year, period_month)
-                    VALUES (:tagihan_id, 'pemasukan', :nama, 'Tagihan Air Bulanan', :nominal, :tanggal, :keterangan, :period_year, :period_month)
-                ");
-                $stmt->execute([
-                    ':tagihan_id' => $tagihanId,
-                    ':nama' => $nama,
-                    ':nominal' => floatval($existing['total_biaya']),
-                    ':tanggal' => date('Y-m-d'),
-                    ':keterangan' => $keterangan,
-                    ':period_year' => intval($existing['period_year']),
-                    ':period_month' => intval($existing['period_month'])
-                ]);
-            }
-        }
+        // The payment has already been recorded above with the correct amount and category.
+        // No need for a second insert here, as it would cause double-counting of cash.
 
         // Return success response
         $message = $newTunggakan == 0
